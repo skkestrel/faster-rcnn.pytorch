@@ -13,10 +13,16 @@ from __future__ import print_function
 __sets = {}
 from datasets.pascal_voc import pascal_voc
 from datasets.coco import coco
+from datasets.openimages import openimages
 from datasets.imagenet import imagenet
 from datasets.vg import vg
 
 import numpy as np
+
+# Set up openimages_2018_train
+for split in ['train', 'val', 'trainval', 'test']:
+  name = 'openimages_2018_{0}'.format(split)
+  __sets[name] = (lambda split=split: openimages(split))
 
 # Set up voc_<year>_<split>
 for year in ['2007', '2012']:
