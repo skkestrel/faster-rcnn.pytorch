@@ -22,56 +22,60 @@ import uuid
 
 class openimages(imdb):
   def __init__(self, image_set):
-    imdb.__init__(self, 'coco_2018_' + image_set)
+    imdb.__init__(self, 'openimages_2018_' + image_set)
     # name, paths
     self._image_set = image_set
     self._data_path = osp.join(cfg.DATA_DIR, 'openimages_2018')
 
     # load COCO API, classes, class <-> id mappings
-    self._COCO = COCO(self._get_ann_file())
-    cats = self._COCO.loadCats(self._COCO.getCatIds())
-    self._classes = tuple(['__background__'] + [c['name'] for c in cats])
-    self._class_to_ind = dict(list(zip(self.classes, list(range(self.num_classes)))))
-    self._class_to_coco_cat_id = dict(list(zip([c['name'] for c in cats],
-                                               self._COCO.getCatIds())))
-    self._image_index = self._load_image_set_index()
+    self._read_ann_file()
+    self._load_image_set_index()
+    cats = self._load_classes()
+
+    self._classes = tuple(['__background__'] + [c[1] for c in cats])
+    self._class_to_ind = dict(list(zip(self._classes, list(range(self.num_classes)))))
+    self._class_to_coco_cat_id = dict(list(zip([c[1] for c in cats], [c[0] for c in cats])))
+
     # Default to roidb handler
     self.set_proposal_method('gt')
     self.competition_mode(False)
 
     # Some image sets are "views" (i.e. subsets) into others.
-    # For example, minival2014 is a random 5000 image subset of val2014.
     # This mapping tells us where the view's images and proposals come from.
     self._view_map = {
-      'minival2014': 'val2014',  # 5k val2014 subset
-      'valminusminival2014': 'val2014',  # val2014 \setminus minival2014
-      'test-dev2015': 'test2015',
-      'valminuscapval2014': 'val2014',
-      'capval2014': 'val2014',
-      'captest2014': 'val2014'
+      'val2018': 'train2018', 
+      'trainval2018': 'train2018', 
     }
-    coco_name = image_set + year  # e.g., "val2014"
+    coco_name = image_set + "2018"  # e.g., "val2014"
     self._data_name = (self._view_map[coco_name]
                        if coco_name in self._view_map
                        else coco_name)
+
     # Dataset splits that have ground-truth annotations (test splits
     # do not have gt annotations)
-    self._gt_splits = ('train', 'val', 'minival')
+    self._gt_splits = ('train', 'val', 'trainval')
 
-  def _get_ann_file(self):
-    return "challenge-2018-train-vrd-bbox.csv"
+  def _load_classes(self):
+    cats = []
+    with open(osp.join(self._data_path, 'challenge-2018-classes-vrd.csv'), "r") as f:
+      line = f.readline()
+      while line != "":
+        line = line.strip().split(",")
+        cats.append((line[0], line[1]))
+        line = f.readline()
+    return cats
+
+  def _get_ann_files(self):
+    return ("challenge-2018-train-vrd-bbox.csv", "image-sizes")
 
   def _load_image_set_index(self):
     """
     Load image ids.
     """
-    image_ids = self._COCO.getImgIds()
-    return image_ids
+    return [i[0] for i in self._imsize]
 
   def _get_widths(self):
-    anns = self._COCO.loadImgs(self._image_index)
-    widths = [ann['width'] for ann in anns]
-    return widths
+    return [i[1] for i in self._imsize]
 
   def image_path_at(self, i):
     """
@@ -91,8 +95,7 @@ class openimages(imdb):
     """
     # Example image path for index=119993:
     #   images/train2014/COCO_train2014_000000119993.jpg
-    file_name = ('COCO_' + self._data_name + '_' +
-                 str(index).zfill(12) + '.jpg')
+    file_name = index + '.jpg'
     image_path = osp.join(self._data_path, 'images',
                           self._data_name, file_name)
     assert osp.exists(image_path), \
@@ -111,46 +114,72 @@ class openimages(imdb):
       print('{} gt roidb loaded from {}'.format(self.name, cache_file))
       return roidb
 
-    annotation_dict = self._load_all_annotations(self._image_index)
-    gt_roidb = [self._load_openimages_annotation(annotation_dict, index)
-                for index in self._image_index]
+    gt_roidb = [self._load_openimages_annotation(i)
+                for i in range(len(self._image_index))]
 
     with open(cache_file, 'wb') as fid:
       pickle.dump(gt_roidb, fid, pickle.HIGHEST_PROTOCOL)
     print('wrote gt roidb to {}'.format(cache_file))
     return gt_roidb
 
-  def _load_all_annotations(self, image_index):
-    with open(self._get_ann_file()) as f:
+  def _read_ann_file(self):
+    self._annotations = []
+    self._imsize = []
+    with open(osp.join(self._data_path, self._get_ann_file()[0])) as f:
       if f.readline() != "ImageID,Source,LabelName,Confidence,XMin,XMax,YMin,YMax,IsOccluded,IsTruncated,IsGroupOf,IsDepiction,IsInside,Label"
         raise Exception()
       line = f.readline()
       while line != "":
-        
+        line = line.[:-1].split(',')
+# imageID, labelName, xmin, xmax, ymin, ymax
+        tup = (line[0], line[2], float(line[4]), float(line[5]), float(line[6]), float(line[7]))
+
+        # LabelName = Label
+        if line[2] != line[-1]:
+          raise Exception("?")
+        # Confidence = 1
+        if line[3] != "1":
+          raise Exception("?")
+
+        self._annotations.append(tup)
         line = f.readline()
 
-  def _load_openimages_annotation(self, index):
+    with open(osp.join(self._data_path, self._get_ann_file()[1])) as f:
+      line = f.readline()
+      while line != "":
+        line = line.[:-1].split(',')
+
+        # imageid, width, height
+        tup = (line[0], int(line[1]), int(line[2]))
+
+        self._imsize.append(tup)
+        line = f.readline()
+
+  def _load_openimages_annotation(self, i):
     """
     Loads openimages bounding-box instance annotations. Crowd instances are
     handled by marking their overlaps (with all categories) to -1. This
     overlap value means that crowd "instances" are excluded from training.
     """
-    im_ann = 
-    width = im_ann['width']
-    height = im_ann['height']
+    width = self._imsize[i][1]
+    height = self._imsize[i][2]
 
-    annIds = self._COCO.getAnnIds(imgIds=index, iscrowd=None)
-    objs = self._COCO.loadAnns(annIds)
+    index = self._image_index[i]
+    objs = [entry for entry in self._annotations if entry[0] == index]
+
     # Sanitize bboxes -- some are invalid
     valid_objs = []
     for obj in objs:
-      x1 = np.max((0, obj['bbox'][0]))
-      y1 = np.max((0, obj['bbox'][1]))
-      x2 = np.min((width - 1, x1 + np.max((0, obj['bbox'][2] - 1))))
-      y2 = np.min((height - 1, y1 + np.max((0, obj['bbox'][3] - 1))))
-      if obj['area'] > 0 and x2 >= x1 and y2 >= y1:
-        obj['clean_bbox'] = [x1, y1, x2, y2]
-        valid_objs.append(obj)
+      x1 = np.max((0, int(width * obj[2])))
+      x2 = np.min((width - 1, int(width * obj[3])))
+      y1 = np.max((0, int(height * obj[4])))
+      y2 = np.max((height - 1, int(height * obj[5])))
+
+      # TODO are the BB cooridnates diferent?
+
+      if x2 >= x1 and y2 >= y1:
+        valid_objs.append((obj[0], obj[1], x1, y1, x2, y2))
+
     objs = valid_objs
     num_objs = len(objs)
 
@@ -166,16 +195,13 @@ class openimages(imdb):
                                      for cls in self._classes[1:]])
 
     for ix, obj in enumerate(objs):
-      cls = coco_cat_id_to_class_ind[obj['category_id']]
-      boxes[ix, :] = obj['clean_bbox']
+      cls = coco_cat_id_to_class_ind[obj[1]]
+      boxes[ix, :] = [obj[2], obj[3], obj[4], obj[5]]
       gt_classes[ix] = cls
-      seg_areas[ix] = obj['area']
-      if obj['iscrowd']:
-        # Set overlap to -1 for all classes for crowd objects
-        # so they will be excluded during training
-        overlaps[ix, :] = -1.0
-      else:
-        overlaps[ix, cls] = 1.0
+      seg_areas[ix] = (obj[4] - obj[2]) * (obj[5] - obj[3])
+
+      # TODO what does overlaps do?
+      overlaps[ix, cls] = 1.0
 
     ds_utils.validate_boxes(boxes, width=width, height=height)
     overlaps = scipy.sparse.csr_matrix(overlaps)
@@ -214,9 +240,8 @@ class openimages(imdb):
   def _get_box_file(self, index):
     # first 14 chars / first 22 chars / all chars + .mat
     # COCO_val2014_0/COCO_val2014_000000447/COCO_val2014_000000447991.mat
-    file_name = ('COCO_' + self._data_name +
-                 '_' + str(index).zfill(12) + '.mat')
-    return osp.join(file_name[:14], file_name[:22], file_name)
+    file_name = 'OI_' + index + '.mat'
+    return osp.join(file_name[:4], file_name[:8], file_name)
 
   def evaluate_detections(self, all_boxes, output_dir):
     pass
