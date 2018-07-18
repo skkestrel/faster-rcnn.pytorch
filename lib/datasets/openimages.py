@@ -29,7 +29,7 @@ class openimages(imdb):
 
     # load COCO API, classes, class <-> id mappings
     self._read_ann_file()
-    self._load_image_set_index()
+    self._image_index = self._load_image_set_index()
     cats = self._load_classes()
 
     self._classes = tuple(['__background__'] + [c[1] for c in cats])
@@ -114,8 +114,11 @@ class openimages(imdb):
       print('{} gt roidb loaded from {}'.format(self.name, cache_file))
       return roidb
 
-    gt_roidb = [self._load_openimages_annotation(i)
-                for i in range(len(self._image_index))]
+    gt_roidb = []
+    for i in range(len(self._image_index)):
+      gt_roidb.append(self._load_openimages_annotation(i))
+      if i % (len(self._image_index) // 10) == 0:
+        print("{0} out of {1} images".format(i, len(self._image_index)))
 
     with open(cache_file, 'wb') as fid:
       pickle.dump(gt_roidb, fid, pickle.HIGHEST_PROTOCOL)
@@ -124,13 +127,16 @@ class openimages(imdb):
 
   def _read_ann_file(self):
     self._annotations = []
+    self._annotation_dict = {}
+
     self._imsize = []
-    with open(osp.join(self._data_path, self._get_ann_file()[0])) as f:
-      if f.readline() != "ImageID,Source,LabelName,Confidence,XMin,XMax,YMin,YMax,IsOccluded,IsTruncated,IsGroupOf,IsDepiction,IsInside,Label"
+    with open(osp.join(self._data_path, self._get_ann_files()[0])) as f:
+      line = f.readline()
+      if line != "ImageID,Source,LabelName,Confidence,XMin,XMax,YMin,YMax,IsOccluded,IsTruncated,IsGroupOf,IsDepiction,IsInside,Label\n":
         raise Exception()
       line = f.readline()
       while line != "":
-        line = line.[:-1].split(',')
+        line = line[:-1].split(',')
 # imageID, labelName, xmin, xmax, ymin, ymax
         tup = (line[0], line[2], float(line[4]), float(line[5]), float(line[6]), float(line[7]))
 
@@ -144,10 +150,15 @@ class openimages(imdb):
         self._annotations.append(tup)
         line = f.readline()
 
-    with open(osp.join(self._data_path, self._get_ann_file()[1])) as f:
+    for ann in self._annotations:
+      if ann[0] not in self._annotation_dict:
+        self._annotation_dict[ann[0]] = []
+      self._annotation_dict[ann[0]].append(ann)
+
+    with open(osp.join(self._data_path, self._get_ann_files()[1])) as f:
       line = f.readline()
       while line != "":
-        line = line.[:-1].split(',')
+        line = line[:-1].split(',')
 
         # imageid, width, height
         tup = (line[0], int(line[1]), int(line[2]))
@@ -165,20 +176,32 @@ class openimages(imdb):
     height = self._imsize[i][2]
 
     index = self._image_index[i]
-    objs = [entry for entry in self._annotations if entry[0] == index]
+    if index not in self._annotation_dict:
+      objs = []
+      print("not loading image {0}".format(index))
+    else:
+      objs = self._annotation_dict[index]
 
     # Sanitize bboxes -- some are invalid
     valid_objs = []
-    for obj in objs:
+    for number,obj in enumerate(objs):
+      '''
       x1 = np.max((0, int(width * obj[2])))
-      x2 = np.min((width - 1, int(width * obj[3])))
+      x2 = np.min((width - 1, int((width - 1) * obj[3])))
       y1 = np.max((0, int(height * obj[4])))
-      y2 = np.max((height - 1, int(height * obj[5])))
+      y2 = np.min((height - 1, int((height - 1) * obj[5])))
+      '''
+      x1 = int(width * obj[2])
+      x2 = int((width - 1) * obj[3])
+      y1 = int(height * obj[4])
+      y2 = int((height - 1) * obj[5])
 
       # TODO are the BB cooridnates diferent?
 
       if x2 >= x1 and y2 >= y1:
         valid_objs.append((obj[0], obj[1], x1, y1, x2, y2))
+      else:
+        print("filtered")
 
     objs = valid_objs
     num_objs = len(objs)
@@ -212,9 +235,6 @@ class openimages(imdb):
             'gt_overlaps': overlaps,
             'flipped': False,
             'seg_areas': seg_areas}
-
-  def _get_widths(self):
-    return [r['width'] for r in self.roidb]
 
   def append_flipped_images(self):
     num_images = self.num_images

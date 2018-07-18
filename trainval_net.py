@@ -158,8 +158,8 @@ if __name__ == '__main__':
     logger = Logger('./logs')
 
   if args.dataset == "openimages_2018":
-      args.imdb_name = "openimages_train"
-      args.imdbval_name = "openimages_val"
+      args.imdb_name = "openimages_2018_train"
+      args.imdbval_name = "openimages_2018_val"
       args.set_cfgs = ['ANCHOR_SCALES', '[4, 8, 16, 32]', 'ANCHOR_RATIOS', '[0.5,1,2]', 'MAX_NUM_GT_BOXES', '50']
   elif args.dataset == "pascal_voc":
       args.imdb_name = "voc_2007_trainval"
