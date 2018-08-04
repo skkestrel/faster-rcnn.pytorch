@@ -143,6 +143,7 @@ if __name__ == '__main__':
 
   print('Called with args:')
   print(args)
+  args.set_cfgs = ['ANCHOR_SCALES', '[4, 8, 16, 32]']
 
   if args.cfg_file is not None:
     cfg_from_file(args.cfg_file)
@@ -164,15 +165,14 @@ if __name__ == '__main__':
   load_name = os.path.join(input_dir,
     'faster_rcnn_{}_{}_{}.pth'.format(args.checksession, args.checkepoch, args.checkpoint))
 
-  pascal_classes = np.asarray(['__background__',
-                       'aeroplane', 'bicycle', 'bird', 'boat',
-                       'bottle', 'bus', 'car', 'cat', 'chair',
-                       'cow', 'diningtable', 'dog', 'horse',
-                       'motorbike', 'person', 'pottedplant',
-                       'sheep', 'sofa', 'train', 'tvmonitor'])
+  pascal_classes = np.asarray(['__background__', 'Piano', 'Beer', 'Chopsticks', 'Cat', 'Snowmobile', 'Drill', 'Tiara', 'Motorcycle', 'Tennis racket', 'Football', 'Mobile phone', 'Flute', 'Tennis ball', 'Chair', 'Woman', 'Boy', 'Coffee table', 'Handbag', 'Fork', 'Girl', 'Coffee cup', 'Violin', 'Backpack', 'Knife', 'Snowboard', 'Rugby ball', 'Snake', 'Oven', 'Microwave oven', 'Man', 'Bench', 'Desk', 'Suitcase', 'Sofa bed', 'Horse', 'Hat', 'Microphone', 'Table tennis racket', 'Monkey', 'Surfboard', 'Table', 'Bottle', 'Mug', 'Wine glass', 'Drum', 'Dog', 'Guitar', 'Ski', 'Bed', 'Spoon', 'Briefcase', 'Hamster', 'Envelope', 'Car', 'Bicycle', 'Camera', 'Dolphin', 'Taxi', 'Van', 'Elephant', 'Racket', 'Pretzel'])
+
+
+
 
   # initilize the network here.
   if args.net == 'vgg16':
+    print(pascal_classes)
     fasterRCNN = vgg16(pascal_classes, pretrained=False, class_agnostic=args.class_agnostic)
   elif args.net == 'res101':
     fasterRCNN = resnet(pascal_classes, 101, pretrained=False, class_agnostic=args.class_agnostic)
@@ -191,6 +191,7 @@ if __name__ == '__main__':
     checkpoint = torch.load(load_name)
   else:
     checkpoint = torch.load(load_name, map_location=(lambda storage, loc: storage))
+
   fasterRCNN.load_state_dict(checkpoint['model'])
   if 'pooling_mode' in checkpoint.keys():
     cfg.POOLING_MODE = checkpoint['pooling_mode']

@@ -63,11 +63,21 @@ def _get_image_blob(roidb, scale_inds):
   im_scales = []
   for i in range(num_images):
     #im = cv2.imread(roidb[i]['image'])
-    im = imread(roidb[i]['image'])
+    im = imread(roidb[i]['image'], mode='RGB')
+
+    if len(im.shape) == 0:
+      im = np.zeros((roidb[i]['height'], roidb[i]['width'], 3))
+
+    if len(im.shape) != 3:
+      pdb.set_trace()
 
     if len(im.shape) == 2:
       im = im[:,:,np.newaxis]
       im = np.concatenate((im,im,im), axis=2)
+
+    if im.shape[2] > 3:
+      im = im[:,:,:3]
+
     # flip the channel, since the original one using cv2
     # rgb -> bgr
     im = im[:,:,::-1]

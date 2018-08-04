@@ -130,6 +130,21 @@ class openimages(imdb):
     self._annotation_dict = {}
 
     self._imsize = []
+
+    available_ims = set()
+
+    with open(osp.join(self._data_path, self._get_ann_files()[1])) as f:
+      line = f.readline()
+      while line != "":
+        line = line[:-1].split(',')
+
+        # imageid, width, height
+        tup = (line[0], int(line[1]), int(line[2]))
+        available_ims.add(line[0])
+
+        self._imsize.append(tup)
+        line = f.readline()
+
     with open(osp.join(self._data_path, self._get_ann_files()[0])) as f:
       line = f.readline()
       if line != "ImageID,Source,LabelName,Confidence,XMin,XMax,YMin,YMax,IsOccluded,IsTruncated,IsGroupOf,IsDepiction,IsInside,Label\n":
@@ -137,6 +152,10 @@ class openimages(imdb):
       line = f.readline()
       while line != "":
         line = line[:-1].split(',')
+        if line[0] not in available_ims:
+          line = f.readline()
+          continue
+
 # imageID, labelName, xmin, xmax, ymin, ymax
         tup = (line[0], line[2], float(line[4]), float(line[5]), float(line[6]), float(line[7]))
 
@@ -154,17 +173,6 @@ class openimages(imdb):
       if ann[0] not in self._annotation_dict:
         self._annotation_dict[ann[0]] = []
       self._annotation_dict[ann[0]].append(ann)
-
-    with open(osp.join(self._data_path, self._get_ann_files()[1])) as f:
-      line = f.readline()
-      while line != "":
-        line = line[:-1].split(',')
-
-        # imageid, width, height
-        tup = (line[0], int(line[1]), int(line[2]))
-
-        self._imsize.append(tup)
-        line = f.readline()
 
   def _load_openimages_annotation(self, i):
     """
